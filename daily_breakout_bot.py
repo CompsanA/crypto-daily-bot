@@ -739,34 +739,45 @@ class DailyBreakoutBot:
             
             print(f"✅ Кэш уровней обновлён для {len(self.levels_cache)} монет")
             
+        def update_levels_cache(self):
+        """Обновление кэша уровней для всех монет"""
+        # Получаем список монет
+        try:
+            url = f"{self.base_url}/fapi/v1/ticker/24hr"
+            response = requests.get(url, timeout=10)
+            data = response.json()
+            
+            # ИСПРАВЛЕНИЕ: Проверяем что data это список
+            if not isinstance(data, list):
+                print(f"❌ Ошибка: API вернул неожиданный формат: {type(data)}")
+                return
+            
+            # Фильтруем USDT пары с достаточным объёмом
+            symbols = []
+            for t in data:
+                try:
+                    if isinstance(t, dict) and t.get('symbol', '').endswith('USDT'):
+                        quote_vol = float(t.get('quoteVolume', 0))
+                        if quote_vol >= MIN_VOLUME_24H:
+                            symbols.append(t['symbol'])
+                except (ValueError, KeyError) as e:
+                    continue  # Пропускаем проблемные записи
+            
+            print(f"Найдено {len(symbols)} монет для анализа")
+            
+            # Анализируем каждую монету
+            for i, symbol in enumerate(symbols[:50]):  # Топ-50 по объёму
+                levels = self.find_levels(symbol)
+                self.levels_cache[symbol] = levels
+                
+                if (i + 1) % 10 == 0:
+                    print(f"  Обработано {i+1}/{len(symbols[:50])}")
+                    time.sleep(1)
+            
+            print(f"✅ Кэш уровней обновлён для {len(self.levels_cache)} монет")
+            
         except Exception as e:
-            print(f"Ошибка обновления кэша: {e}")
-    
-    def run(self):
-        """Запуск бота"""
-        print("\n" + "="*60)
-        print("🤖 DAILY BREAKOUT BOT v1.0")
-        print("="*60)
-        print(f"⚙️  Период анализа: {DAILY_LOOKBACK_DAYS} дней")
-        print(f"⚙️  Окно подтверждений: {CONFIRMATION_WINDOW//60} минут")
-        print(f"⏱️  Интервал проверки: {CHECK_INTERVAL} секунд")
-        print(f"🎯 Зона касания: ±{TOUCH_ZONE}%")
-        print(f"🎯 Минимальный пробой: {BREAKOUT_MIN}%")
-        print(f"⏰ Память касания: {TOUCH_MEMORY//60} минут")
-        print(f"📊 Фильтры: OI {OI_MIN_CHANGE}%, Цена {PRICE_MIN_CHANGE}%, Объём {VOLUME_MIN_INCREASE}%")
-        print("="*60 + "\n")
-        
-        # Стартовое сообщение
-        start_msg = (
-            "🚀 <b>Daily Breakout Bot запущен!</b>\n\n"
-            f"⚙️ Анализ дневных уровней за {DAILY_LOOKBACK_DAYS} дней\n"
-            f"⏱️ Проверка каждые {CHECK_INTERVAL//60} минуты\n"
-            f"🎯 Касание: ±{TOUCH_ZONE}% от уровня\n"
-            f"🎯 Пробой: {BREAKOUT_MIN}% выход из зоны\n"
-            f"📊 Окно подтверждений: {CONFIRMATION_WINDOW//60} минут\n\n"
-            f"🕐 Запущен: {datetime.now().strftime('%H:%M:%S')}"
-        )
-        self.send_telegram_message(start_msg)
+            print(f"❌ Ошибка обновления кэша: {e}")
         
         try:
             while True:
