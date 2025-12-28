@@ -713,32 +713,7 @@ class DailyBreakoutBot:
         
         return alerts
     
-    def update_levels_cache(self):
-        """Обновление кэша уровней для всех монет"""
-        # Получаем список монет
-        try:
-            url = f"{self.base_url}/fapi/v1/ticker/24hr"
-            response = requests.get(url, timeout=10)
-            tickers = response.json()
-            
-            # Фильтруем USDT пары с достаточным объёмом
-            symbols = [t['symbol'] for t in tickers 
-                      if t['symbol'].endswith('USDT') 
-                      and float(t['quoteVolume']) >= MIN_VOLUME_24H]
-            
-            print(f"Найдено {len(symbols)} монет для анализа")
-            
-            # Анализируем каждую монету
-            for i, symbol in enumerate(symbols[:50]):  # Топ-50 по объёму
-                levels = self.find_levels(symbol)
-                self.levels_cache[symbol] = levels
-                
-                if (i + 1) % 10 == 0:
-                    print(f"  Обработано {i+1}/{len(symbols[:50])}")
-                    time.sleep(1)
-            
-            print(f"✅ Кэш уровней обновлён для {len(self.levels_cache)} монет")
-            
+    
         def update_levels_cache(self):
         """Обновление кэша уровней для всех монет"""
         # Получаем список монет
