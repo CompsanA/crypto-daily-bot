@@ -13,7 +13,7 @@ CHECK_INTERVAL = 120  # Проверка каждые 2 минуты (секун
 # Примечание: Кэш дневных уровней обновляется каждые 2 часа (автоматически)
 
 # === АНАЛИЗ ДНЕВНЫХ УРОВНЕЙ ===
-DAILY_LOOKBACK_DAYS = 180        # Сколько дней анализировать (30/60/90/180)
+DAILY_LOOKBACK_DAYS = 90        # Сколько дней анализировать (30/60/90/180)
 DAILY_MIN_TOUCHES = 3           # Мин. касаний для уровня множественных касаний
 DAILY_ZONE_TOLERANCE = 0.5      # Допуск зоны (%) для группировки уровней
 REVERSAL_MIN_DAYS = 5           # Мин. дней тренда для определения разворота
@@ -38,7 +38,7 @@ REQUIRE_VOLUME_SPIKE = True     # Обязателен рост объёма
 REQUIRE_DIRECTION_MATCH = True  # Направления совпадают
 
 # === МИНИМАЛЬНЫЕ ТРЕБОВАНИЯ ===
-MIN_VOLUME_24H = 500000       # Мин. объём 24ч ($10M)
+MIN_VOLUME_24H = 10000000       # Мин. объём 24ч ($10M)
 
 # === ГРАФИКИ ===
 SEND_CHARTS = True              # Отправлять ли ссылки на графики
@@ -86,6 +86,11 @@ class DailyBreakoutBot:
             }
             response = requests.get(url, params=params, timeout=10)
             data = response.json()
+            
+            # Проверка что API вернул список, а не ошибку
+            if not isinstance(data, list):
+                print(f"⚠️ API вернул не список для {symbol}: {data}")
+                return []
             
             candles = []
             for candle in data:
@@ -298,8 +303,15 @@ class DailyBreakoutBot:
             params = {'symbol': symbol}
             response = requests.get(url, params=params, timeout=10)
             data = response.json()
+            
+            # Проверка что есть поле price
+            if 'price' not in data:
+                print(f"⚠️ Нет поля 'price' в ответе для {symbol}: {data}")
+                return None
+                
             return float(data['price'])
-        except:
+        except Exception as e:
+            print(f"Ошибка получения цены {symbol}: {e}")
             return None
     
     def get_open_interest(self, symbol):
@@ -309,8 +321,15 @@ class DailyBreakoutBot:
             params = {'symbol': symbol}
             response = requests.get(url, params=params, timeout=10)
             data = response.json()
+            
+            # Проверка что есть поле openInterest
+            if 'openInterest' not in data:
+                print(f"⚠️ Нет поля 'openInterest' в ответе для {symbol}: {data}")
+                return None
+                
             return float(data['openInterest'])
-        except:
+        except Exception as e:
+            print(f"Ошибка получения OI {symbol}: {e}")
             return None
     
     def get_24h_stats(self, symbol):
@@ -320,11 +339,18 @@ class DailyBreakoutBot:
             params = {'symbol': symbol}
             response = requests.get(url, params=params, timeout=10)
             data = response.json()
+            
+            # Проверка что есть необходимые поля
+            if 'quoteVolume' not in data or 'lastPrice' not in data:
+                print(f"⚠️ Нет полей 'quoteVolume'/'lastPrice' в ответе для {symbol}: {data}")
+                return None
+                
             return {
                 'volume': float(data['quoteVolume']),
                 'price': float(data['lastPrice'])
             }
-        except:
+        except Exception as e:
+            print(f"Ошибка получения 24h stats {symbol}: {e}")
             return None
     
     def check_confirmations(self, symbol, current_time):
@@ -713,8 +739,7 @@ class DailyBreakoutBot:
         
         return alerts
     
-    
-        def update_levels_cache(self):
+    def update_levels_cache(self):
         """Обновление кэша уровней для всех монет"""
         # Получаем список монет
         try:
@@ -735,7 +760,7 @@ class DailyBreakoutBot:
                         quote_vol = float(t.get('quoteVolume', 0))
                         if quote_vol >= MIN_VOLUME_24H:
                             symbols.append(t['symbol'])
-                except (ValueError, KeyError) as e:
+                except (ValueError, KeyError):
                     continue  # Пропускаем проблемные записи
             
             print(f"Найдено {len(symbols)} монет для анализа")
@@ -753,6 +778,32 @@ class DailyBreakoutBot:
             
         except Exception as e:
             print(f"❌ Ошибка обновления кэша: {e}")
+    
+    def run(self):
+        """Запуск бота"""
+        print("\n" + "="*60)
+        print("🤖 DAILY BREAKOUT BOT v1.0")
+        print("="*60)
+        print(f"⚙️  Период анализа: {DAILY_LOOKBACK_DAYS} дней")
+        print(f"⚙️  Окно подтверждений: {CONFIRMATION_WINDOW//60} минут")
+        print(f"⏱️  Интервал проверки: {CHECK_INTERVAL} секунд")
+        print(f"🎯 Зона касания: ±{TOUCH_ZONE}%")
+        print(f"🎯 Минимальный пробой: {BREAKOUT_MIN}%")
+        print(f"⏰ Память касания: {TOUCH_MEMORY//60} минут")
+        print(f"📊 Фильтры: OI {OI_MIN_CHANGE}%, Цена {PRICE_MIN_CHANGE}%, Объём {VOLUME_MIN_INCREASE}%")
+        print("="*60 + "\n")
+        
+        # Стартовое сообщение
+        start_msg = (
+            "🚀 <b>Daily Breakout Bot запущен!</b>\n\n"
+            f"⚙️ Анализ дневных уровней за {DAILY_LOOKBACK_DAYS} дней\n"
+            f"⏱️ Проверка каждые {CHECK_INTERVAL//60} минуты\n"
+            f"🎯 Касание: ±{TOUCH_ZONE}% от уровня\n"
+            f"🎯 Пробой: {BREAKOUT_MIN}% выход из зоны\n"
+            f"📊 Окно подтверждений: {CONFIRMATION_WINDOW//60} минут\n\n"
+            f"🕐 Запущен: {datetime.now().strftime('%H:%M:%S')}"
+        )
+        self.send_telegram_message(start_msg)
         
         try:
             while True:
